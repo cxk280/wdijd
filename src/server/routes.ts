@@ -17,6 +17,8 @@ import { Bus } from './sse.js';
 export interface ServerCtx {
   mode: 'generate' | 'review' | 'browse';
   deckId?: string;
+  /** How the SPA should open a 'review' deck: due-only ('review') or whole-deck ('cram'). */
+  reviewMode?: 'review' | 'cram';
   engine: Engine;
   bus: Bus;
 }
@@ -57,7 +59,9 @@ function withDeck(deckId: string): { deck: Deck; state: DeckState } | null {
 export function createApi(ctx: ServerCtx): Hono {
   const api = new Hono();
 
-  api.get('/boot', (c) => c.json({ mode: ctx.mode, deckId: ctx.deckId ?? null }));
+  api.get('/boot', (c) =>
+    c.json({ mode: ctx.mode, deckId: ctx.deckId ?? null, reviewMode: ctx.reviewMode ?? 'review' }),
+  );
 
   api.get('/events', (c) =>
     streamSSE(c, async (stream) => {

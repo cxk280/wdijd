@@ -28,7 +28,9 @@ export async function gradeAnswer(
     instructions: gradingPrompt(args),
     schema: gradeGenJsonSchema,
     cwd: args.cwd ?? process.cwd(),
-    maxTurns: 1,
+    // emitting the StructuredOutput tool + finalizing takes ≥2 turns, so
+    // maxTurns:1 always errors out (error_max_turns) before any output
+    maxTurns: 4,
     fast: true,
   });
   const parsed = GradeGenSchema.safeParse(run.output);

@@ -136,6 +136,8 @@ export interface ServeReviewArgs {
   engine: Engine;
   open: boolean;
   port?: number;
+  /** 'cram' re-studies the whole deck; 'review' (default) serves due cards only. */
+  reviewMode?: 'review' | 'cram';
 }
 
 export async function serveReview(args: ServeReviewArgs): Promise<void> {
@@ -143,6 +145,7 @@ export async function serveReview(args: ServeReviewArgs): Promise<void> {
   const ctx: ServerCtx = {
     mode: 'review',
     deckId: args.deck.id,
+    reviewMode: args.reviewMode ?? 'review',
     engine: args.engine,
     bus,
   };

@@ -58,7 +58,8 @@ export async function generateDeck(
       instructions: repairPrompt(run.output, parsed.error.message),
       schema: deckGenJsonSchema,
       cwd: spec.cwd,
-      maxTurns: 1,
+      // ≥2 turns needed to emit StructuredOutput + finalize (maxTurns:1 errors out)
+      maxTurns: 4,
       fast: true,
     });
     repairOutput = repair.output;

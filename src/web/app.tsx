@@ -65,7 +65,7 @@ export function App() {
           } else if (e.type === 'error') setProgressError(e);
         });
       } else if (boot.mode === 'review' && boot.deckId) {
-        await startSession(boot.deckId, 'review');
+        await startSession(boot.deckId, boot.reviewMode);
       } else {
         setView({ v: 'decks', decks: await api.decks() });
       }
@@ -170,7 +170,9 @@ export function App() {
         {view.v === 'decks' && (
           <DeckList decks={view.decks} onOpen={(id, mode) => void startSession(id, mode)} />
         )}
-        {view.v === 'overview' && <Overview deck={view.deck} />}
+        {view.v === 'overview' && (
+          <Overview deck={view.deck} onBegin={() => nextOrFinish(view.deck)} />
+        )}
         {view.v === 'card' && q && (
           <CardView
             deckId={view.deck.id}

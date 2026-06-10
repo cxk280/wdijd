@@ -61,7 +61,7 @@ afterEach(() => delete process.env.WDIJD_HOME);
 describe('api routes', () => {
   it('boot reports mode and deck', async () => {
     const r = await api.request('/boot');
-    expect(await r.json()).toEqual({ mode: 'review', deckId });
+    expect(await r.json()).toEqual({ mode: 'review', deckId, reviewMode: 'review' });
   });
 
   it('lists decks with due counts', async () => {

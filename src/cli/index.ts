@@ -121,10 +121,11 @@ program
 program
   .command('review')
   .argument('[deckId]', 'deck to review (default: latest for this repo)')
+  .option('--cram', 're-study the whole deck, not just due cards')
   .option('--engine <name>', 'claude | codex (default: auto-detect)')
   .option('--no-open', "don't open the browser")
   .option('--port <port>', 'server port')
-  .action(async (deckId: string | undefined, flags: CliFlags) => {
+  .action(async (deckId: string | undefined, flags: CliFlags & { cram?: boolean }) => {
     const entry = deckId ? loadIndex().find((e) => e.deckId === deckId) : latestDeck(process.cwd());
     if (!entry) die(deckId ? `no deck "${deckId}"` : 'no decks yet — run `npx wdijd` first');
     const deck = loadDeck(entry.deckId);
@@ -133,8 +134,8 @@ program
     const state = loadState(deck);
     const fsrsCards = Object.values(state.cards);
     const due = fsrsCards.filter((c) => isDue(c)).length;
-    if (due === 0) {
-      console.log(`0 due · next: ${nextDueLine(fsrsCards)}`);
+    if (!flags.cram && due === 0) {
+      console.log(`0 due · next: ${nextDueLine(fsrsCards)} (use --cram to re-study now)`);
       return;
     }
 
@@ -151,6 +152,7 @@ program
       engine,
       open: flags.open,
       port: parsePort(flags.port),
+      reviewMode: flags.cram ? 'cram' : 'review',
     });
   });
 

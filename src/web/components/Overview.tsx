@@ -1,7 +1,7 @@
 import type { Deck } from '../../core/schema';
 import { Markdown, Mermaid } from './Markdown';
 
-export function Overview({ deck }: { deck: Deck }) {
+export function Overview({ deck, onBegin }: { deck: Deck; onBegin: () => void }) {
   const sections = new Map<string, number>();
   for (const c of deck.cards) {
     if (c.type === 'overview') continue;
@@ -30,7 +30,7 @@ export function Overview({ deck }: { deck: Deck }) {
           </div>
         ))}
       </div>
-      <button class="cta">begin — enter</button>
+      <button class="cta" onClick={onBegin}>begin — enter</button>
     </div>
   );
 }

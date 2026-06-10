@@ -60,7 +60,7 @@ describe('generateDeck', () => {
     expect(out.warnings).toEqual(['needed one repair pass']);
     expect(e.calls).toHaveLength(2);
     expect(e.calls[1]!.fast).toBe(true);
-    expect(e.calls[1]!.maxTurns).toBe(1);
+    expect(e.calls[1]!.maxTurns).toBeGreaterThan(1);
   });
 
   it('salvages valid cards when repair also fails', async () => {
@@ -74,6 +74,12 @@ describe('generateDeck', () => {
   it('throws when nothing is salvageable', async () => {
     const e = fakeEngine([{ junk: true }]);
     await expect(generateDeck(e, spec, opts)).rejects.toThrow(/did not match/);
+  });
+
+  it('repair pass uses >1 turn (StructuredOutput needs ≥2)', async () => {
+    const e = fakeEngine([{ junk: true }, goodDeck]);
+    await generateDeck(e, spec, opts);
+    expect(e.calls[1]!.maxTurns ?? 0).toBeGreaterThan(1);
   });
 
   it('passes altitude level into the prompt', async () => {

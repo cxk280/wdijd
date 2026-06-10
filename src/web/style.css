@@ -43,6 +43,7 @@ code, pre { font-family: var(--mono); font-size: 13px; }
 .accent { color: var(--accent); }
 .mono { font-family: var(--mono); font-size: 13px; }
 .hint-line { color: var(--dim); font-family: var(--mono); font-size: 12px; }
+.hint-warn { color: var(--warn); font-family: var(--mono); font-size: 12px; }
 .inline-error { color: var(--bad); font-family: var(--mono); font-size: 13px; }
 .linkish { color: var(--dim); font-family: var(--mono); font-size: 13px; text-decoration: underline; }
 .linkish:hover { color: var(--fg); }
@@ -73,6 +74,12 @@ code, pre { font-family: var(--mono); font-size: 13px; }
   padding: 10px 18px;
 }
 .cta:hover { background: rgba(110, 231, 183, 0.08); }
+.grade-btn { align-self: flex-start; }
+.reveal-btn {
+  align-self: flex-start; font-family: var(--mono); font-size: 12px; color: var(--dim);
+  border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px;
+}
+.reveal-btn:hover { border-color: var(--dim); color: var(--fg); }
 
 /* cards */
 .card-view { display: flex; flex-direction: column; gap: 18px; }
