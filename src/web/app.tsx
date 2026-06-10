@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import type { Deck, GradeResult, RatingName } from '../core/schema';
 import { api, type DeckRow, type Summary as SummaryData } from './api';
 import { Queue } from './session';
+import { clearCramProgress, loadCramProgress, saveCramProgress } from './persist';
 import { CardView } from './components/CardView';
 import { Capstone } from './components/Explain';
 import { DeckList } from './components/DeckList';
@@ -34,12 +35,31 @@ export function App() {
     const session = await api.session(deckId, mode);
     modeRef.current = mode;
     queueRef.current = new Queue(session.cardIds, mode);
-    if (mode === 'cram') setView({ v: 'overview', deck });
-    else {
+
+    if (mode === 'cram') {
+      // resume a refreshed-mid-session cram from where it left off
+      const saved = loadCramProgress(deckId);
+      const restored = saved
+        ? Queue.restore(saved, new Set(deck.cards.map((c) => c.id)))
+        : null;
+      if (restored) {
+        queueRef.current = restored;
+        skipOverviews(deck);
+        setView({ v: restored.done() ? 'capstone' : 'card', deck });
+      } else {
+        setView({ v: 'overview', deck });
+      }
+    } else {
       skipOverviews(deck);
       setView({ v: 'card', deck });
     }
   }, []);
+
+  const persistProgress = (deck: Deck) => {
+    if (modeRef.current === 'cram' && queueRef.current) {
+      saveCramProgress(deck.id, queueRef.current.snapshot());
+    }
+  };
 
   // skip non-rateable overview cards inside the queue
   const skipOverviews = (deck: Deck) => {
@@ -77,6 +97,7 @@ export function App() {
   const nextOrFinish = (deck: Deck) => {
     const q = queueRef.current!;
     skipOverviews(deck);
+    persistProgress(deck);
     if (!q.done()) {
       setView({ v: 'card', deck });
       rerender();
@@ -87,6 +108,7 @@ export function App() {
   };
 
   const endSession = async (deck: Deck, _capstone: GradeResult | null) => {
+    clearCramProgress(deck.id); // session finished — don't resume next time
     const data = await api.endSession(deck.id);
     setView({ v: 'summary', deck, data });
   };
