@@ -28,6 +28,11 @@ export interface SourceSpec {
 
 export interface GenerateOptions {
   depth: Depth;
+  /**
+   * Altitude, 1-10. 1 = highest level (what the repo is for, how it fits its
+   * ecosystem); 10 = most granular (meanings of individual lines). Default 5.
+   */
+  level: number;
   /** Optional user steer: "focus on the auth changes". */
   focus?: string;
 }
