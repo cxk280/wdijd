@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { marked } from 'marked';
+import { renderMarkdown } from '../markdown-render';
 
 export function Markdown({ text }: { text: string }) {
-  const html = marked.parse(text, { async: false });
-  return <div class="md" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div class="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />;
 }
 
 /** Mermaid renders lazily; on any failure we fall back to the source. */
@@ -17,7 +16,14 @@ export function Mermaid({ code }: { code: string }) {
     void (async () => {
       try {
         const mermaid = (await import('mermaid')).default;
-        mermaid.initialize({ startOnLoad: false, theme: 'dark', darkMode: true });
+        // securityLevel:'strict' sanitizes labels and blocks injected HTML/JS in
+        // LLM-authored diagram code (default is already strict — pinned explicitly).
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: 'dark',
+          darkMode: true,
+          securityLevel: 'strict',
+        });
         const out = await mermaid.render(idRef.current, code);
         if (alive) setSvg(out.svg);
       } catch {

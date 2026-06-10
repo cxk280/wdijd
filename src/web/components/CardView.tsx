@@ -88,7 +88,9 @@ function Qa({ card, onRate }: { card: Card & { type: 'qa' }; onRate: (r: RatingN
           <RateRow suggested={null} onRate={onRate} />
         </>
       ) : (
-        <div class="hint-line">space — show answer</div>
+        <button class="reveal-btn" onClick={() => setFlipped(true)}>
+          show answer — space
+        </button>
       )}
     </div>
   );
@@ -159,9 +161,13 @@ function Cloze({
           );
         })}
       </pre>
-      <div class="hint-line">
-        {allOut ? `all ${blanks} blanks revealed` : `${revealed} of ${blanks} blanks revealed`}
-      </div>
+      {allOut ? (
+        <div class="hint-line">all {blanks} blanks revealed</div>
+      ) : (
+        <button class="reveal-btn" onClick={() => setRevealed((n) => n + 1)}>
+          reveal next blank — space ({revealed}/{blanks})
+        </button>
+      )}
       {allOut && (
         <>
           <Chips refs={card.sourceRefs} />

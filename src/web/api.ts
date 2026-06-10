@@ -3,6 +3,7 @@ import type { Deck, GradeResult, RatingName } from '../core/schema';
 export interface Boot {
   mode: 'generate' | 'review' | 'browse';
   deckId: string | null;
+  reviewMode: 'review' | 'cram';
 }
 
 export interface DeckRow {

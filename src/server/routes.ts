@@ -17,8 +17,28 @@ import { Bus } from './sse.js';
 export interface ServerCtx {
   mode: 'generate' | 'review' | 'browse';
   deckId?: string;
+  /** How the SPA should open a 'review' deck: due-only ('review') or whole-deck ('cram'). */
+  reviewMode?: 'review' | 'cram';
   engine: Engine;
   bus: Bus;
+}
+
+/**
+ * Serialize state mutations per deck. loadState→…→saveState is a read-modify-
+ * write; two concurrent requests (multiple tabs, fast 1-4 keypresses) would
+ * otherwise read the same state and the second save would clobber the first.
+ */
+const deckLocks = new Map<string, Promise<unknown>>();
+function withDeckLock<T>(deckId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = deckLocks.get(deckId) ?? Promise.resolve();
+  const next = prev.catch(() => undefined).then(fn);
+  deckLocks.set(
+    deckId,
+    next.finally(() => {
+      if (deckLocks.get(deckId) === next) deckLocks.delete(deckId);
+    }),
+  );
+  return next;
 }
 
 function openSession(state: DeckState): DeckState['sessions'][number] {
@@ -39,7 +59,9 @@ function withDeck(deckId: string): { deck: Deck; state: DeckState } | null {
 export function createApi(ctx: ServerCtx): Hono {
   const api = new Hono();
 
-  api.get('/boot', (c) => c.json({ mode: ctx.mode, deckId: ctx.deckId ?? null }));
+  api.get('/boot', (c) =>
+    c.json({ mode: ctx.mode, deckId: ctx.deckId ?? null, reviewMode: ctx.reviewMode ?? 'review' }),
+  );
 
   api.get('/events', (c) =>
     streamSSE(c, async (stream) => {
@@ -80,27 +102,29 @@ export function createApi(ctx: ServerCtx): Hono {
   });
 
   api.get('/decks/:id/session', (c) => {
-    const found = withDeck(c.req.param('id'));
-    if (!found) return c.json({ error: 'not found' }, 404);
-    const { deck, state } = found;
+    const deck = loadDeck(c.req.param('id'));
+    if (!deck) return c.json({ error: 'not found' }, 404);
     const mode = c.req.query('mode') === 'review' ? 'review' : 'cram';
-    const ids =
-      mode === 'cram'
-        ? deck.cards.map((card) => card.id)
-        : deck.cards
-            .filter((card) => {
-              const st = state.cards[card.id];
-              return st && isDue(st);
-            })
-            .sort(
-              (a, b) =>
-                new Date(state.cards[a.id]!.due).getTime() -
-                new Date(state.cards[b.id]!.due).getTime(),
-            )
-            .map((card) => card.id);
-    openSession(state);
-    saveState(deck.id, state);
-    return c.json({ mode, cardIds: ids });
+    return withDeckLock(deck.id, async () => {
+      const state = loadState(deck);
+      const ids =
+        mode === 'cram'
+          ? deck.cards.map((card) => card.id)
+          : deck.cards
+              .filter((card) => {
+                const st = state.cards[card.id];
+                return st && isDue(st);
+              })
+              .sort(
+                (a, b) =>
+                  new Date(state.cards[a.id]!.due).getTime() -
+                  new Date(state.cards[b.id]!.due).getTime(),
+              )
+              .map((card) => card.id);
+      openSession(state);
+      saveState(deck.id, state);
+      return c.json({ mode, cardIds: ids });
+    });
   });
 
   api.post('/decks/:id/cards/:cardId/grade', async (c) => {
@@ -125,86 +149,94 @@ export function createApi(ctx: ServerCtx): Hono {
   });
 
   api.post('/decks/:id/cards/:cardId/rate', async (c) => {
-    const found = withDeck(c.req.param('id'));
-    if (!found) return c.json({ error: 'not found' }, 404);
-    const { deck, state } = found;
+    const deck = loadDeck(c.req.param('id'));
+    if (!deck) return c.json({ error: 'not found' }, 404);
     const cardId = c.req.param('cardId');
-    const st = state.cards[cardId];
-    if (!st) return c.json({ error: 'unknown card' }, 404);
     const body = await c.req.json<{ rating: string }>();
     const rating = RatingSchema.safeParse(body.rating);
     if (!rating.success) return c.json({ error: 'bad rating' }, 400);
-    const r = rate(st, rating.data);
-    state.cards[cardId] = r.card;
-    state.logs.push({ ...r.log, cardId });
-    openSession(state).ratings.push({ cardId, rating: rating.data });
-    saveState(deck.id, state);
-    touchLastStudied(deck.id);
-    return c.json({ due: r.card.due });
+    return withDeckLock(deck.id, async () => {
+      const state = loadState(deck);
+      const st = state.cards[cardId];
+      if (!st) return c.json({ error: 'unknown card' }, 404);
+      const r = rate(st, rating.data);
+      state.cards[cardId] = r.card;
+      state.logs.push({ ...r.log, cardId });
+      openSession(state).ratings.push({ cardId, rating: rating.data });
+      saveState(deck.id, state);
+      touchLastStudied(deck.id);
+      return c.json({ due: r.card.due });
+    });
   });
 
   api.post('/decks/:id/capstone', async (c) => {
-    const found = withDeck(c.req.param('id'));
-    if (!found) return c.json({ error: 'not found' }, 404);
-    const { deck, state } = found;
+    const deck = loadDeck(c.req.param('id'));
+    if (!deck) return c.json({ error: 'not found' }, 404);
     const { answer } = await c.req.json<{ answer: string }>();
     if (!answer?.trim()) return c.json({ error: 'empty answer' }, 400);
+    let result;
     try {
-      const result = await gradeAnswer(ctx.engine, {
+      // grade outside the lock — it's a slow network call, not a state mutation
+      result = await gradeAnswer(ctx.engine, {
         cardPrompt: deck.capstone.prompt,
         rubric: deck.capstone.rubric,
         modelAnswer: 'n/a — judge purely against the rubric criteria.',
         answer,
       });
-      openSession(state).capstone = { answer, result };
-      saveState(deck.id, state);
-      return c.json(result);
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : 'grading failed' }, 502);
     }
+    return withDeckLock(deck.id, async () => {
+      const state = loadState(deck);
+      openSession(state).capstone = { answer, result };
+      saveState(deck.id, state);
+      return c.json(result);
+    });
   });
 
   api.post('/decks/:id/session/end', (c) => {
-    const found = withDeck(c.req.param('id'));
-    if (!found) return c.json({ error: 'not found' }, 404);
-    const { deck, state } = found;
-    const session = openSession(state);
-    session.endedAt = new Date().toISOString();
-    saveState(deck.id, state);
-    touchLastStudied(deck.id);
+    const deck = loadDeck(c.req.param('id'));
+    if (!deck) return c.json({ error: 'not found' }, 404);
+    return withDeckLock(deck.id, async () => {
+      const state = loadState(deck);
+      const session = openSession(state);
+      session.endedAt = new Date().toISOString();
+      saveState(deck.id, state);
+      touchLastStudied(deck.id);
 
-    const againCounts = new Map<string, number>();
-    for (const r of session.ratings)
-      if (r.rating === 'again') againCounts.set(r.cardId, (againCounts.get(r.cardId) ?? 0) + 1);
-    const weak = [...againCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([cardId, agains]) => {
-        const card = deck.cards.find((x) => x.id === cardId);
-        let label = cardId;
-        if (card)
-          label =
-            card.type === 'qa'
-              ? card.front
-              : card.type === 'cloze'
-                ? `cloze: ${card.context}`
-                : card.type !== 'overview'
-                  ? card.prompt
-                  : cardId;
-        return { cardId, agains, label, section: card?.section ?? '' };
+      const againCounts = new Map<string, number>();
+      for (const r of session.ratings)
+        if (r.rating === 'again') againCounts.set(r.cardId, (againCounts.get(r.cardId) ?? 0) + 1);
+      const weak = [...againCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([cardId, agains]) => {
+          const card = deck.cards.find((x) => x.id === cardId);
+          let label = cardId;
+          if (card)
+            label =
+              card.type === 'qa'
+                ? card.front
+                : card.type === 'cloze'
+                  ? `cloze: ${card.context}`
+                  : card.type !== 'overview'
+                    ? card.prompt
+                    : cardId;
+          return { cardId, agains, label, section: card?.section ?? '' };
+        });
+
+      const minutes = Math.max(
+        1,
+        Math.round((Date.now() - new Date(session.startedAt).getTime()) / 60_000),
+      );
+      return c.json({
+        cardsRated: new Set(session.ratings.map((r) => r.cardId)).size,
+        minutes,
+        capstone: session.capstone?.result ?? null,
+        weak,
+        nextDue: nextDueLine(Object.values(state.cards)),
+        deckDir: deck.source.projectPath ? `.wdijd/${deck.id}/` : `~/.wdijd/decks/${deck.id}/`,
       });
-
-    const minutes = Math.max(
-      1,
-      Math.round((Date.now() - new Date(session.startedAt).getTime()) / 60_000),
-    );
-    return c.json({
-      cardsRated: new Set(session.ratings.map((r) => r.cardId)).size,
-      minutes,
-      capstone: session.capstone?.result ?? null,
-      weak,
-      nextDue: nextDueLine(Object.values(state.cards)),
-      deckDir: deck.source.projectPath ? `.wdijd/${deck.id}/` : `~/.wdijd/decks/${deck.id}/`,
     });
   });
 

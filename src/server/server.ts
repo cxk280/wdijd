@@ -27,8 +27,21 @@ function webDir(): string {
   return join(dirname(fileURLToPath(import.meta.url)), 'web');
 }
 
+/** Block DNS-rebinding: a remote page can point its hostname at 127.0.0.1 and
+ *  reach this server, but the Host header it sends is its own domain. Only
+ *  localhost Host values are real local clients. */
+export function isLocalHost(host: string | undefined): boolean {
+  if (!host) return false;
+  const name = host.replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
+  return name === 'localhost' || name === '127.0.0.1' || name === '::1';
+}
+
 function buildApp(ctx: ServerCtx): Hono {
   const app = new Hono();
+  app.use('/api/*', async (c, next) => {
+    if (!isLocalHost(c.req.header('host'))) return c.text('forbidden', 403);
+    await next();
+  });
   app.route('/api', createApi(ctx));
   app.get('*', async (c) => {
     const root = webDir();
@@ -123,6 +136,8 @@ export interface ServeReviewArgs {
   engine: Engine;
   open: boolean;
   port?: number;
+  /** 'cram' re-studies the whole deck; 'review' (default) serves due cards only. */
+  reviewMode?: 'review' | 'cram';
 }
 
 export async function serveReview(args: ServeReviewArgs): Promise<void> {
@@ -130,6 +145,7 @@ export async function serveReview(args: ServeReviewArgs): Promise<void> {
   const ctx: ServerCtx = {
     mode: 'review',
     deckId: args.deck.id,
+    reviewMode: args.reviewMode ?? 'review',
     engine: args.engine,
     bus,
   };
