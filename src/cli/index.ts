@@ -16,6 +16,12 @@ function die(msg: string, hint?: string): never {
   process.exit(1);
 }
 
+function parsePort(p: string | undefined): number | undefined {
+  if (p === undefined) return undefined;
+  if (!/^\d+$/.test(p) || Number(p) < 1 || Number(p) > 65535) die('--port must be 1-65535');
+  return Number(p);
+}
+
 interface CliFlags {
   n?: string;
   vs?: string;
@@ -44,6 +50,8 @@ async function generate(targetArg: string | undefined, flags: CliFlags): Promise
     };
     if (pre.level !== undefined && (!Number.isInteger(pre.level) || pre.level < 1 || pre.level > 10))
       die('--level must be an integer from 1 to 10');
+    if (flags.n !== undefined && !/^\d+$/.test(flags.n)) die('-n must be a positive integer');
+    if (flags.n !== undefined && Number(flags.n) < 1) die('-n must be at least 1');
 
     if (hasTargetFlags) {
       target = targetArg
@@ -86,7 +94,7 @@ async function generate(targetArg: string | undefined, flags: CliFlags): Promise
     opts,
     engine,
     open: flags.open,
-    port: flags.port ? Number(flags.port) : undefined,
+    port: parsePort(flags.port),
   });
 }
 
@@ -142,7 +150,7 @@ program
       deck,
       engine,
       open: flags.open,
-      port: flags.port ? Number(flags.port) : undefined,
+      port: parsePort(flags.port),
     });
   });
 
