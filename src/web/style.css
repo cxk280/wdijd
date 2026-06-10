@@ -20,6 +20,10 @@ body {
   font: 15px/1.55 -apple-system, system-ui, sans-serif;
 }
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; padding: 0; text-align: left; }
+
+/* keyboard-first: a clear focus ring for keyboard navigation (focus-visible
+   stays out of the way for mouse users) */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 code, pre { font-family: var(--mono); font-size: 13px; }
 
 /* chrome */
@@ -125,7 +129,8 @@ code, pre { font-family: var(--mono); font-size: 13px; }
 }
 .answer-box.tall { min-height: 220px; }
 .answer-box.dimmed { opacity: 0.6; }
-.answer-box:focus { outline: none; border-color: var(--dim); }
+.answer-box:focus { border-color: var(--dim); }
+.answer-box:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .rubric { display: flex; flex-direction: column; gap: 10px; }
 .criterion { display: flex; gap: 10px; align-items: baseline; }
 .crit-ok { color: var(--accent); font-family: var(--mono); }

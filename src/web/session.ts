@@ -1,4 +1,12 @@
-import type { RatingName } from '../core/schema';
+import type { RatingName } from '../core/schema.js';
+
+export interface QueueSnapshot {
+  items: string[];
+  pos: number;
+  rated: number;
+  total: number;
+  mode: 'cram' | 'review';
+}
 
 /**
  * Cram queue with mastery requeue: `again` reinserts ~5 ahead, `hard` ~10
@@ -17,6 +25,27 @@ export class Queue {
   ) {
     this.items = [...cardIds];
     this.total = cardIds.length;
+  }
+
+  snapshot(): QueueSnapshot {
+    return { items: [...this.items], pos: this.pos, rated: this.rated, total: this.total, mode: this.mode };
+  }
+
+  /**
+   * Rebuild from a saved snapshot, but only if every queued id still exists in
+   * the current deck (guards against a deck whose cards changed under the id).
+   * Returns null if the snapshot is stale/inconsistent.
+   */
+  static restore(snap: QueueSnapshot, validIds: Set<string>): Queue | null {
+    if (snap.mode !== 'cram') return null;
+    if (!snap.items.every((id) => validIds.has(id))) return null;
+    if (snap.pos < 0 || snap.pos > snap.items.length) return null;
+    const q = new Queue([], snap.mode);
+    q.items = [...snap.items];
+    q.pos = snap.pos;
+    q.rated = snap.rated;
+    (q as { total: number }).total = snap.total;
+    return q;
   }
 
   current(): string | null {

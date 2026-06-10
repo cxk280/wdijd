@@ -6,6 +6,27 @@ import { Engine, EngineError, EngineRunOpts } from './types.js';
 
 const AUTH_HINT = 'run `codex login` to sign in with your ChatGPT account';
 
+/**
+ * OpenAI's structured-output validator is stricter than Claude's: it rejects
+ * `oneOf` (zod's discriminated union emits it — use `anyOf`) and requires every
+ * object to list all its property keys in `required` with additionalProperties
+ * false. Our schemas have no truly-optional fields (nullable, not optional), so
+ * marking all keys required is correct. Claude's path keeps the original schema.
+ */
+export function toStrictOpenAiSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(toStrictOpenAiSchema);
+  if (typeof schema !== 'object' || schema === null) return schema;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(schema)) {
+    out[k === 'oneOf' ? 'anyOf' : k] = toStrictOpenAiSchema(v);
+  }
+  if (out.type === 'object' && out.properties && typeof out.properties === 'object') {
+    out.additionalProperties = false;
+    out.required = Object.keys(out.properties as Record<string, unknown>);
+  }
+  return out;
+}
+
 /** Pull a one-line progress string out of a codex --json JSONL event, if any. */
 function progressLine(event: Record<string, unknown>): string | null {
   const item = event.item as Record<string, unknown> | undefined;
@@ -36,7 +57,7 @@ export function codexEngine(): Engine {
       const dir = await mkdtemp(join(tmpdir(), 'wdijd-'));
       const schemaFile = join(dir, 'schema.json');
       const outFile = join(dir, 'out.json');
-      await writeFile(schemaFile, JSON.stringify(opts.schema));
+      await writeFile(schemaFile, JSON.stringify(toStrictOpenAiSchema(opts.schema)));
 
       const args = [
         'exec',

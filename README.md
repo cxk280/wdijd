@@ -39,6 +39,7 @@ npx wdijd ./paper.pdf      # a PDF (Claude engine)
 npx wdijd ./diagram.png    # an image
 npx wdijd https://…        # a URL
 npx wdijd review           # due cards for this repo's latest deck
+npx wdijd review --cram    # re-study the whole deck now, not just due cards
 npx wdijd ls               # all decks
 
   -m, --focus <text>       steer the deck ("focus on the auth changes")
