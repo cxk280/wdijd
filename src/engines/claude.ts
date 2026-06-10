@@ -60,13 +60,38 @@ export function claudeEngine(): Engine {
           ? attachmentPrompt(opts.instructions, attachments)
           : opts.instructions;
 
+      // Each chained segment must be a read-only git command or a harmless
+      // text filter — `git log; rm -rf /` must not ride along.
+      const GIT_RO =
+        /^\s*git\s+(-C\s+\S+\s+)?(diff|log|show|status|ls-files|cat-file|rev-parse|blame|branch)\b/;
+      const FILTER = /^\s*(head|tail|wc|grep|sort|uniq|cut|cat)\b/;
+      const gitReadOnly = (command: string): boolean =>
+        !/[<>`]|\$\(/.test(command) && // no redirection or command substitution
+        command
+          .split(/(?:\|\||&&|;|\|)/)
+          .filter((s) => s.trim())
+          .every((s) => GIT_RO.test(s) || FILTER.test(s));
       const q = query({
         prompt,
         options: {
           cwd: opts.cwd,
           allowedTools,
-          disallowedTools: opts.needsRepoTools || opts.needsGitTools ? undefined : ['*'],
-          permissionMode: 'bypassPermissions', // tool surface above is read-only
+          // default mode + canUseTool = headless permission handler. Never
+          // bypassPermissions: it ignores the allowlist entirely (the agent
+          // can Write/Bash at will).
+          permissionMode: 'default',
+          canUseTool: async (toolName, input) => {
+            if (
+              opts.needsGitTools &&
+              toolName === 'Bash' &&
+              gitReadOnly(String((input as { command?: string }).command ?? ''))
+            )
+              return { behavior: 'allow', updatedInput: input };
+            return {
+              behavior: 'deny',
+              message: 'wdijd grants read-only exploration only (Read/Grep/Glob and read-only git)',
+            };
+          },
           maxTurns: opts.maxTurns ?? 25,
           maxBudgetUsd: 1.5,
           model: opts.fast ? 'haiku' : undefined,

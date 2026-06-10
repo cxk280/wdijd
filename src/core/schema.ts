@@ -109,8 +109,38 @@ export interface GradeResult extends GradeGen {
 
 // ── JSON Schemas for engine structured output ────────────────────────────────
 
-export const deckGenJsonSchema = z.toJSONSchema(DeckGenSchema);
-export const gradeGenJsonSchema = z.toJSONSchema(GradeGenSchema);
+/**
+ * Structured-output grammars (Claude StructuredOutput tool, codex
+ * --output-schema) reject schemas with length/numeric constraints and require
+ * additionalProperties:false on objects. An invalid schema is silently dropped
+ * — the agent then answers in prose and structured output never arrives — so
+ * strip what they can't accept. Zod still enforces the full constraints when
+ * we validate the output.
+ */
+const UNSUPPORTED_KEYS = [
+  '$schema', 'minItems', 'maxItems', 'minLength', 'maxLength',
+  'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum',
+  'multipleOf', 'pattern',
+];
+
+export function sanitizeForStructuredOutput(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(sanitizeForStructuredOutput);
+  if (typeof schema !== 'object' || schema === null) return schema;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(schema)) {
+    if (UNSUPPORTED_KEYS.includes(k)) continue;
+    out[k] = sanitizeForStructuredOutput(v);
+  }
+  if (out.type === 'object') out.additionalProperties = false;
+  return out;
+}
+
+export const deckGenJsonSchema = sanitizeForStructuredOutput(
+  z.toJSONSchema(DeckGenSchema),
+) as Record<string, unknown>;
+export const gradeGenJsonSchema = sanitizeForStructuredOutput(
+  z.toJSONSchema(GradeGenSchema),
+) as Record<string, unknown>;
 
 // ── Salvage ──────────────────────────────────────────────────────────────────
 

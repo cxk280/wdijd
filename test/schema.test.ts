@@ -57,6 +57,14 @@ describe('DeckGenSchema', () => {
   it('exports a JSON schema with the card union', () => {
     expect(JSON.stringify(deckGenJsonSchema)).toContain('overview');
   });
+
+  it('sanitizes the schema for structured-output grammars', () => {
+    const s = JSON.stringify(deckGenJsonSchema);
+    for (const key of ['$schema', 'minItems', 'minLength', 'maxLength']) {
+      expect(s).not.toContain(`"${key}"`);
+    }
+    expect(deckGenJsonSchema.additionalProperties).toBe(false);
+  });
 });
 
 describe('salvageDeckGen', () => {
