@@ -96,6 +96,7 @@ program
   .version('0.1.0');
 
 program
+  .command('gen', { isDefault: true, hidden: true })
   .argument('[target]', 'path, URL, commit, or range (omit for the wizard)')
   .option('-n <count>', 'digest the last N commits')
   .option('--vs <ref>', 'digest the diff vs a ref')
